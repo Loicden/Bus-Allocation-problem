@@ -10,11 +10,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 #Hyperparamètres
-v = 10                     # Vitesse moyenne des bus (m/s)
-f = 6/3600                    # Fréquence des bus (bus/s)
-c = 2 # ??
+v = 10                  # Vitesse moyenne des bus (m/s)
+f = 6/3600              # Fréquence des bus (bus/s)
+c = 2*60                # le temps nécessaire pour changer de bus (correspondance, en s)
 
-taille_map = 1000 # (x,y) app à [-taille_map,+taille_map]²
+taille_map = 1000       # (x,y) app à [-taille_map,+taille_map]²
 distance_minimale = 100 # Pour éviter que des arrêts ne soient trop prêts
 #%
 
@@ -471,6 +471,18 @@ class Reseau:
         #entre les arrêts i vers j
         #Il faut encore prendre en compte le temps de changement d'arrêt.
         
+    def Calcul_ATT(self, U, T):
+        sum0 = 0
+        for x in range(len(liste_arrets)):
+            sum1 = 0
+            sum2 = 0
+            for y in range(len(liste_arrets)):
+                sum1 += U[x,y]*T[x,y]
+                sum2 += T[x,y]
+            sum0 += sum1/sum2
+        self.ATT = sum0/len(liste_arrets)
+        return self.ATT
+        
 def distance_mini(arret,arrets_liste):
     mini = taille_map*4
     for a in arrets_liste:
@@ -508,8 +520,11 @@ for i in range(16):
     liste_reseaux.append(Reseau(liste_arrets))
     liste_reseaux[-1].D_build()
     liste_reseaux[-1].U_build()
+    liste_reseaux[-1].Calcul_ATT(liste_reseaux[-1].U, T)
     liste_reseaux[-1].display(False)
+    print("ATT réseau ",i," : ", liste_reseaux[-1].ATT)
     for a in liste_arrets:
         a.r_m = False
 plt.show
+
 
