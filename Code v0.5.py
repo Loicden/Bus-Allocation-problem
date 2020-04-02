@@ -8,6 +8,9 @@ A faire:
 import random as rd
 import numpy as np
 import matplotlib.pyplot as plt
+import time
+import copy
+import pylab
 
 #Hyperparamètres
 v = 10                  # Vitesse moyenne des bus (m/s)
@@ -482,6 +485,84 @@ class Reseau:
             sum0 += sum1/sum2
         self.ATT = sum0/len(liste_arrets)
         return self.ATT
+    
+    def petite_mut(self):
+        
+        mutation = False
+        for i in self.lignes:               
+            if i.Nb_arrets > 2 :                        # On supprime un arrêt au hasard, qui n'et pas la gare centrale.
+                arret_supp = rd.choice(i.arrets)
+                while arret_supp.r_m == True :
+                    arret_supp = rd.choice(i.arrets)
+                i.arrets.remove(arret_supp)
+                self.lignes[self.lignes.index(i)+1].arrets.append(arret_supp)
+            mutation = True
+            break
+        
+        if mutation == False:
+            ligne_supp = rd.choice(self.lignes)
+            arrets_supp = ligne_supp.arrets
+            self.lignes.remove(ligne_supp)
+            for i in arrets_supp :
+                lig = rd.choice(self.lignes)
+                lig.arrets.append(i)
+            
+        
+    def grosse_mut(self, arrets_list):
+        self.nb_arrets = len(arrets_list)
+        self.arrets = arrets_list
+        arrets_dispo = []
+        for a in self.arrets:
+            arrets_dispo.append(a)
+            
+        self.r_m = rd.choice(self.arrets)     # Arrêt principal
+        self.r_m.set_Gare_Centrale()
+        
+        ##### Construction des tableaux et constantes #####
+        
+        self.D_build()         # Matrice des distances entre les arrêts i et j
+        #print("D :", D)
+        #print("T :", T)
+        
+        self.nb_lignes = rd.randint(2,self.nb_arrets-1)     # On veut au moins deux arrêts par lignes, sachant que toutes doivent passer par la gare centrale
+        #print("On choisi de créer",self.nb_lignes,"lignes.")
+        self.lignes = []
+        arrets_dispo.remove(self.r_m)
+        nb_arrets_dispo = len(arrets_dispo)
+        
+        for i in range(1,self.nb_lignes+1):
+#            print()
+#            print("--- Construction d'une ligne ---")
+            arrets_ligne_temp = [self.r_m]  # On ajoute forcement la gare centrale
+            if i != self.nb_lignes :
+                nb_arrets_ligne = rd.randint(1,nb_arrets_dispo-(self.nb_lignes-i))
+                for j in range(nb_arrets_ligne):
+                    arret = rd.choice(arrets_dispo)
+                    arrets_dispo.remove(arret)
+                    arrets_ligne_temp.append(arret)
+            else : 
+                arrets_ligne_temp += arrets_dispo         # On fait la dernière ligne avec les arrêts restants
+                
+            self.lignes.append(Ligne(arrets_ligne_temp,i-1))
+            self.set_lignes_in_arrets()
+#            print("La ligne créée est :", self.lignes[i-1])
+            nb_arrets_dispo = len(arrets_dispo)
+            self.lignes[i-1].ordonner_arrets()
+#            print("Après arrangement, on a la ligne :", self.lignes[i-1])
+        
+    def reproduction(self, reseau_modele):
+        
+        ligne_heritee = rd.choice(reseau_modele.lignes)
+        new_arrets_liste = copy.deepcopy(self.arrets)
+        print(self.arrets)
+        for i in ligne_heritee.arrets:
+            print(i)
+            if i.r_m == False :
+                print("delete")
+                new_arrets_liste.remove(i)
+        grosse_mut(arrets_list)
+        
+        
         
 def distance_mini(arret,arrets_liste):
     mini = taille_map*4
@@ -515,16 +596,104 @@ liste_arrets = create_arrets()
 T = T_build(liste_arrets)
 liste_reseaux = []
 
+
 for i in range(16):
     plt.subplot(4,4,i+1)
     liste_reseaux.append(Reseau(liste_arrets))
     liste_reseaux[-1].D_build()
     liste_reseaux[-1].U_build()
     liste_reseaux[-1].Calcul_ATT(liste_reseaux[-1].U, T)
-    liste_reseaux[-1].display(False)
-    print("ATT réseau ",i," : ", liste_reseaux[-1].ATT)
+    #liste_reseaux[-1].display(False)
     for a in liste_arrets:
         a.r_m = False
-plt.show
+        
+def ATT_liste_build(liste_reseaux):
+    ATT_liste = []
+    for i in liste_reseaux:
+        ATT_liste.append(i.ATT)
+    return ATT_liste
+    
+ATT_liste = ATT_liste_build(liste_reseaux)
+
+#plt.show
 
 
+def Ordonner_reseaux(liste_reseaux, ATT_liste):
+    ATT_liste_ord = copy.deepcopy(ATT_liste)
+    ATT_liste_ord.sort()
+    liste_reseaux_ord = []
+    for i in ATT_liste_ord:
+        liste_reseaux_ord.append(liste_reseaux[ATT_liste.index(i)])
+    liste_reseaux = liste_reseaux_ord
+    return [liste_reseaux, ATT_liste_ord]
+   
+[liste_reseaux, ATT_liste] = Ordonner_reseaux(liste_reseaux, ATT_liste)
+
+print(ATT_liste)
+
+### Evolution des solutions ###
+
+def Optimisation(nb_iter, N_pop, p_M, p_m, p_s, liste_reseaux):
+    
+    p_best = 1 - (p_M + p_m + p_s)
+    nb_M = int(np.floor(N_pop*p_M))
+    nb_m = int(np.floor(N_pop*p_m))
+    nb_s = int(np.floor(N_pop*p_s))
+    nb_best = int(np.floor(N_pop*p_best))
+    if nb_best == 0:
+        nb_best = 1
+    
+    iter = 0
+    tab_iter = []
+    tab_iter.append(iter)
+
+    perf = ATT_liste[0]
+    perf_tab = []
+    perf_tab.append(perf)
+    tps_init = time.time()
+    while iter < nb_iter:
+        
+        iter += 1
+        for i in range(N_pop):
+            
+            # On garde les meilleurs :
+            if i <= nb_best:
+                pass
+            
+            # On fait les petites mutations :
+            elif i <= (nb_best + nb_M):
+                liste_reseaux[i].petite_mut()
+            
+            # On fait les grandes mutations :
+            elif i <= (nb_best + nb_M + nb_m):
+                liste_reseaux[i].grosse_mut(liste_arrets)
+                    
+            # On fait le sexe :
+            else :
+                liste_reseaux[i].reproduction(liste_reseaux[0])
+                
+        ATT_liste_build(liste_reseaux)
+    
+        perf = ATT_liste[0]
+        perf_tab.append(perf)
+        nb_iter.append(nb_iter[-1]+1)
+        
+    tps_final = time.time()
+    Temps = tps_final-tps_init
+    
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(2, 1, 1)
+    line, = ax.plot(tab_iter,perf_tab,'bo', lw=2)
+    #ax.set_yscale('log')
+    pylab.show()
+    
+    return Temps
+    
+nb_iter = 10
+N_pop = len(liste_reseaux)      # Taille de la population
+p_M = 0.3        # Proportion de grande mutation
+p_m = 0.3        # Proportion de petite mutation de taille e_m autour du meilleur : individu ← individu max +U([−e_m ,e_m ])
+p_s = 0.3        # Proportion de sexe : individu ← (individu max + individu)/2
+
+Optimisation(nb_iter, N_pop, p_M, p_m, p_s, liste_reseaux)
